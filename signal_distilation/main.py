@@ -32,6 +32,7 @@ import Reservoir4sig_ensemble_dist
 import PatchReservoir4sig_dist
 import DeepConvLSTM
 import resnet4sig
+import QuantPEC4sig_dist
 
 import utils
 
@@ -327,7 +328,9 @@ def main(args):
                 use_do=True,
                 verbose=False
                 )
-          
+    elif args.student == "QuantPEC":
+        print(f"Creating model: QuantPEC")
+        model = QuantPEC4sig_dist.QuantPatchReservoir(in_channels=3, patch_size=args.patch_size, stride=1, reservoir_size=args.reservoir_size, num_classes=args.nb_classes)     
                     
     if args.finetune:
         if args.finetune.startswith('https'):
