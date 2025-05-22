@@ -308,7 +308,7 @@ def main(args):
     elif args.student == "Transformer":
         print(f"Creating model: Transformer")
         model = transformer.L(num_classes=args.nb_classes)
-    elif args.student == "Resnet":
+    elif "Resnet" in args.student:
         if "L" in args.student:
             print(f"Creating model: Resnet_L")
             model = resnet4sig.ResNet1D(
@@ -359,7 +359,7 @@ def main(args):
                 verbose=False
                 )
           
-    
+    print(model)
     load_path = os.path.join(args.output_dir, 'best_checkpoint.pth')      
     state_dict = torch.load(load_path)
     model.load_state_dict(state_dict["model"], strict=True)
