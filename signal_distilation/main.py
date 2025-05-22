@@ -312,9 +312,10 @@ def main(args):
     elif args.student == "Transformer":
         print(f"Creating model: Transformer")
         model = transformer.L(num_classes=args.nb_classes)
-    elif args.student == "Resnet":
-        print(f"Creating model: Resnet")
-        model = resnet4sig.ResNet1D(
+    elif "Resnet" in args.student:
+        if "L" in args.student:
+            print(f"Creating model: Resnet_L")
+            model = resnet4sig.ResNet1D(
                 in_channels=3,
                 base_filters=64,
                 kernel_size=7,
@@ -328,6 +329,41 @@ def main(args):
                 use_do=True,
                 verbose=False
                 )
+        elif "M" in args.student:
+            print(f"Creating model: Resnet_M")
+            model = resnet4sig.ResNet1D(
+                in_channels=3,
+                base_filters=32,
+                kernel_size=7,
+                stride=2,
+                groups=1,
+                n_block=8,
+                n_classes=args.nb_classes,
+                downsample_gap=2,
+                increasefilter_gap=4,
+                use_bn=True,
+                use_do=True,
+                verbose=False
+                )
+
+        elif "S" in args.student:
+            print(f"Creating model: Resnet_S")
+            model = resnet4sig.ResNet1D(
+                in_channels=3,
+                base_filters=16,
+                kernel_size=7,
+                stride=2,
+                groups=1,
+                n_block=4,
+                n_classes=args.nb_classes,
+                downsample_gap=2,
+                increasefilter_gap=4,
+                use_bn=True,
+                use_do=True,
+                verbose=False
+                )
+
+        
     elif args.student == "QuantPEC":
         print(f"Creating model: QuantPEC")
         model = QuantPEC4sig_dist.QuantPatchReservoir(in_channels=3, patch_size=args.patch_size, stride=1, reservoir_size=args.reservoir_size, num_classes=args.nb_classes)     
