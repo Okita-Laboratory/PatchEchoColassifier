@@ -1,5 +1,3 @@
-# Copyright (c) 2015-present, Facebook, Inc.
-# All rights reserved.
 import argparse
 import datetime
 import numpy as np
@@ -10,7 +8,6 @@ import json
 
 from pathlib import Path
 
-from timm.models import create_model
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
@@ -18,30 +15,23 @@ from timm.utils import NativeScaler, get_state_dict, ModelEma
 
 from datasets import build_dataset
 from engine import train_one_epoch, evaluate
-from losses import DistillationLoss
+from loss_func import DistillationLoss
 from samplers import RASampler
 from augment4sig import new_data_aug_generator, Mixup1D
 
 import MLPMixer4sig_dist
-import Regnet4sig
 import transformer
-import MLPMixer_for_signal
-import Reservoir4sig_dist
-import Reservoir4sig_deep_dist
-import Reservoir4sig_ensemble_dist
-import PatchReservoir4sig_dist
+import PatchEchoClassifier
 import DeepConvLSTM
 import resnet4sig
 
 import utils
-from torch import nn
 import torch
-import torch.nn.functional as F
 import os
 
 
 def get_args_parser():
-    parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
+    parser = argparse.ArgumentParser('Evaluation script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--epochs', default=300, type=int)
     parser.add_argument('--bce-loss', action='store_true')
@@ -145,10 +135,6 @@ def get_args_parser():
     # * Cosub params
     parser.add_argument('--cosub', action='store_true') 
     
-    # * Finetuning params
-    parser.add_argument('--finetune', default='', help='finetune from checkpoint')
-    parser.add_argument('--attn-only', action='store_true') 
-    
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
@@ -198,20 +184,17 @@ def main(args):
 
     print(args)
 
-    if args.distillation_type != 'none' and args.finetune and not args.eval:
-        raise NotImplementedError("Finetuning with distillation not yet supported")
-
     device = torch.device(args.device)
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
-    # random.seed(seed)
+
 
     cudnn.benchmark = True
 
-    dataset_train, dataset_val, args.nb_classes = build_dataset(args=args)#変更
+    dataset_train, dataset_val, args.nb_classes = build_dataset(args=args)
 
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -245,7 +228,7 @@ def main(args):
         drop_last=True,
     )
     if args.ThreeAugment:
-        data_loader_train.dataset.transform = new_data_aug_generator(args) #変更
+        data_loader_train.dataset.transform = new_data_aug_generator(args) 
 
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
@@ -256,7 +239,7 @@ def main(args):
     )
 
     mixup_fn = None
-    mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None #変更
+    mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None 
     if mixup_active:
         mixup_fn = Mixup1D(
             mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
@@ -265,10 +248,10 @@ def main(args):
 
     if args.student == "MLPMixer":
         print(f"Creating model: MLPMixer")
-        model = MLPMixer4sig_dist.DistilledMLPMixer(dim=512,num_classes=args.nb_classes, depth=8)#変更
+        model = MLPMixer4sig_dist.DistilledMLPMixer(dim=512,num_classes=args.nb_classes, depth=8)
     elif args.student == "PRC":
         print(f"Creating model: PatchReservoir")
-        model = PatchReservoir4sig_dist.PatchReservoir(in_channels=3, patch_size=args.patch_size, stride=1, reservoir_size=args.reservoir_size, num_classes=args.nb_classes)
+        model = PatchEchoClassifier.PatchReservoir(in_channels=3, patch_size=args.patch_size, stride=1, reservoir_size=args.reservoir_size, num_classes=args.nb_classes)
     elif "DeepConvLSTM" in args.student:
         if "100" in args.student:
             config= {
@@ -359,7 +342,7 @@ def main(args):
                 verbose=False
                 )
           
-    print(model)
+
     load_path = os.path.join(args.output_dir, 'best_checkpoint.pth')      
     state_dict = torch.load(load_path)
     model.load_state_dict(state_dict["model"], strict=True)
@@ -446,7 +429,7 @@ def main(args):
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
-            set_training_mode=args.train_mode,  # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
+            set_training_mode=args.train_mode,
             args = args,
         )
 
@@ -503,7 +486,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('DeiT training and evaluation script', parents=[get_args_parser()])
+    parser = argparse.ArgumentParser('Evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

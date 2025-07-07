@@ -1,4 +1,3 @@
-#import torch
 import torch.nn as nn
 import torch
 import numpy as np
@@ -39,40 +38,6 @@ class flip(object):
         flip = np.flip(x, axis=2)[0]
         return flip
     
-class CenterCrop1D(object):
-    def __init__(self, target_length=80, padding=0, padding_mode='constant'):
-        super().__init__()
-        self.target_length = target_length
-    def __call__(self, x):
-        if x.shape[0] != 3:
-            raise ValueError("Input signal should have 3 channels (shape should be (3, sequence_length))")
-    
-        current_length = signal.shape[1]
-    
-        if target_length > current_length:
-            raise ValueError("Target length cannot be greater than the current signal length")
-    
-        if target_length == current_length:
-            return x
-    
-        # Calculate crop indices
-        start = (current_length - target_length) // 2
-        end = start + target_length
-    
-        # Create a zero-filled array with the same shape as the input signal
-        result = np.zeros_like(x)
-    
-        # Perform center crop
-        cropped = x[:, start:end]
-    
-        # Calculate padding
-        pad_left = start
-        pad_right = current_length - end
-    
-        # Place the cropped signal in the center of the result array
-        result[:, pad_left:pad_left+target_length] = cropped
-    
-        return result
 
 class RandomCrop1D(nn.Module):
     def __init__(self, size, padding=0, padding_mode='constant'):

@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch
-import numpy
 from timm.layers import to_2tuple
 from timm.models.layers import trunc_normal_
 
@@ -82,7 +81,6 @@ class DistilledMLPMixer(nn.Module):
             flatten=True,
             bias=True,)
         
-        # クラストークンと蒸留トークンの追加
         self.cls_token = nn.Parameter(torch.zeros(1, 1, dim))
         self.dist_token = nn.Parameter(torch.zeros(1, 1, dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patch + 2, dim))
@@ -93,9 +91,8 @@ class DistilledMLPMixer(nn.Module):
         
         self.layer_norm = nn.LayerNorm(dim)
         self.head = nn.Linear(dim, num_classes)
-        self.head_dist = nn.Linear(dim, num_classes)  # 蒸留用の追加のヘッド
+        self.head_dist = nn.Linear(dim, num_classes)
         
-        # 重みの初期化
         trunc_normal_(self.cls_token, std=.02)
         trunc_normal_(self.dist_token, std=.02)
         trunc_normal_(self.pos_embed, std=.02)
@@ -113,13 +110,11 @@ class DistilledMLPMixer(nn.Module):
     def forward(self, x):
         x = self.to_patch_embedding(x)
         
-        # クラストークンと蒸留トークンの追加
         x = x.transpose(1,2)
         cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
         dist_tokens = self.dist_token.expand(x.shape[0], -1, -1)
         x = torch.cat((cls_tokens, dist_tokens, x), dim=1)
         
-        # 位置埋め込みの追加
         x = x + self.pos_embed
         
         x = x.transpose(1,2)
@@ -129,16 +124,12 @@ class DistilledMLPMixer(nn.Module):
         x = x.transpose(1,2)
         x = self.layer_norm(x)
         
-        # クラストークンと蒸留トークンの抽出
         cls_token, dist_token = x[:, 0], x[:, 1]
         
-        # 2つの分類ヘッドを通す
         x_cls = self.head(cls_token)
         x_dist = self.head_dist(dist_token)
         
         if self.training:
-            # 訓練時は両方の出力を返す
             return x_cls, x_dist
         else:
-            # 推論時は平均を取る
             return (x_cls + x_dist) / 2

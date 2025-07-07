@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# GPUの使用可否を判定
 train_on_gpu = torch.cuda.is_available()
 train_on_gpu = False
 
@@ -49,13 +48,12 @@ class DeepConvLSTM(nn.Module):
         x = F.relu(self.conv3(x))
         x = F.relu(self.conv4(x))
         
-        # 転置 (batch_size, sequence_length, features) の形に変更
         x = x.permute(0, 2, 1)  
         x, hidden = self.lstm1(x, hidden)
         x, hidden = self.lstm2(x, hidden)
         
         x = self.dropout(x)
-        x = self.fc(x[:, -1, :])  # 最後の時刻の出力を使用
+        x = self.fc(x[:, -1, :])
         
         return x
     

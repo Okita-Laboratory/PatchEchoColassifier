@@ -1,6 +1,4 @@
 import torch.nn as nn
-import torch
-import numpy
 from timm.layers import to_2tuple
 
 class PatchEmbed1D(nn.Module):

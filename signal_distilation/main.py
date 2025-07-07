@@ -1,5 +1,3 @@
-# Copyright (c) 2015-present, Facebook, Inc.
-# All rights reserved.
 import argparse
 import datetime
 import numpy as np
@@ -10,7 +8,6 @@ import json
 
 from pathlib import Path
 
-from timm.models import create_model
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
@@ -18,27 +15,22 @@ from timm.utils import NativeScaler, get_state_dict, ModelEma
 
 from datasets import build_dataset
 from engine import train_one_epoch, evaluate
-from losses2 import DistillationLoss
+from loss_func import DistillationLoss
 from samplers import RASampler
 from augment4sig import new_data_aug_generator, Mixup1D
 
 import MLPMixer4sig_dist
-import Regnet4sig
 import transformer
 import MLPMixer_for_signal
-import Reservoir4sig_dist
-import Reservoir4sig_deep_dist2
-import Reservoir4sig_ensemble_dist
-import PatchReservoir4sig_dist
+import PatchEchoClassifier
 import DeepConvLSTM
 import resnet4sig
-import QuantPEC4sig_dist
 
 import utils
 
 
 def get_args_parser():
-    parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
+    parser = argparse.ArgumentParser('Training script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--epochs', default=300, type=int)
     parser.add_argument('--bce-loss', action='store_true')
@@ -142,10 +134,6 @@ def get_args_parser():
     # * Cosub params
     parser.add_argument('--cosub', action='store_true') 
     
-    # * Finetuning params
-    parser.add_argument('--finetune', default='', help='finetune from checkpoint')
-    parser.add_argument('--attn-only', action='store_true') 
-    
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
@@ -197,11 +185,10 @@ def main(args):
 
     device = torch.device(args.device)
 
-    # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
-    # random.seed(seed)
+
 
     cudnn.benchmark = True
 
@@ -260,19 +247,9 @@ def main(args):
     if args.student == "MLPMixer":
         print(f"Creating model: MLPMixer")
         model = MLPMixer4sig_dist.DistilledMLPMixer(dim=512,num_classes=args.nb_classes, depth=8)#変更
-    elif args.student == "Reservoir":
-        print(f"Creating model: Reservoir Network")
-        model = Reservoir4sig_dist.Reservoir1D(in_channels=3, patch_size=args.patch_size, stride=1, reservoir_size=args.reservoir_size, num_classes=args.nb_classes, light=False)
-        #model = Reservoir4sig_dist.Reservoir1D(in_channels=3, patch_size=128, stride=1, reservoir_size=4000, num_classes=args.nb_classes, light=False)
-    elif args.student == "DeepReservoir":
-        print(f"Creating model: Reservoir Network")
-        model = Reservoir4sig_deep_dist2.DeepReservoir1D(in_channels=3, patch_size=16, stride=1, reservoir_size=8000, num_layers=3, num_classes=args.nb_classes, light=True)
-    elif args.student == "EnsembleReservoir":
-        print(f"Creating model: Reservoir Network")
-        model = Reservoir4sig_ensemble_dist.Reservoir1D(in_channels=3, patch_size=128, stride=1, reservoir_size=1000, num_classes=args.nb_classes, num_reservoirs=3, light=False)
     elif args.student == "PRC":
         print(f"Creating model: PatchReservoir")
-        model = PatchReservoir4sig_dist.PatchReservoir(in_channels=3, patch_size=args.patch_size, stride=1, reservoir_size=args.reservoir_size, num_classes=args.nb_classes)
+        model = PatchEchoClassifier.PatchReservoir(in_channels=3, patch_size=args.patch_size, stride=1, reservoir_size=args.reservoir_size, num_classes=args.nb_classes)
     elif "DeepConvLSTM" in args.student:
         if "100" in args.student:
             config= {
@@ -362,69 +339,6 @@ def main(args):
                 use_do=True,
                 verbose=False
                 )
-
-        
-    elif args.student == "QuantPEC":
-        print(f"Creating model: QuantPEC")
-        model = QuantPEC4sig_dist.QuantPatchReservoir(in_channels=3, patch_size=args.patch_size, stride=1, reservoir_size=args.reservoir_size, num_classes=args.nb_classes)     
-                    
-    if args.finetune:
-        if args.finetune.startswith('https'):
-            checkpoint = torch.hub.load_state_dict_from_url(
-                args.finetune, map_location='cpu', check_hash=True)
-        else:
-            checkpoint = torch.load(args.finetune, map_location='cpu')
-
-        checkpoint_model = checkpoint['model']
-        state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias', 'head_dist.weight', 'head_dist.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
-        # interpolate position embedding
-        pos_embed_checkpoint = checkpoint_model['pos_embed']
-        embedding_size = pos_embed_checkpoint.shape[-1]
-        num_patches = model.patch_embed.num_patches
-        num_extra_tokens = model.pos_embed.shape[-2] - num_patches
-        # height (== width) for the checkpoint position embedding
-        orig_size = int((pos_embed_checkpoint.shape[-2] - num_extra_tokens) ** 0.5)
-        # height (== width) for the new position embedding
-        new_size = int(num_patches ** 0.5)
-        # class_token and dist_token are kept unchanged
-        extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
-        # only the position tokens are interpolated
-        pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
-        pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
-        pos_tokens = torch.nn.functional.interpolate(
-            pos_tokens, size=(new_size, new_size), mode='bicubic', align_corners=False)
-        pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
-        new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
-        checkpoint_model['pos_embed'] = new_pos_embed
-
-        model.load_state_dict(checkpoint_model, strict=False)
-        
-    if args.attn_only:
-        for name_p,p in model.named_parameters():
-            if '.attn.' in name_p:
-                p.requires_grad = True
-            else:
-                p.requires_grad = False
-        try:
-            model.head.weight.requires_grad = True
-            model.head.bias.requires_grad = True
-        except:
-            model.fc.weight.requires_grad = True
-            model.fc.bias.requires_grad = True
-        try:
-            model.pos_embed.requires_grad = True
-        except:
-            print('no position encoding')
-        try:
-            for p in model.patch_embed.parameters():
-                p.requires_grad = False
-        except:
-            print('no patch embed')
             
     model.to(device)
 
@@ -467,9 +381,7 @@ def main(args):
     teacher_model = None
     if args.distillation_type != 'none':
         print(f"Creating teacher model: {args.model}")
-        if args.model == "Regnet":
-            teacher_model = Regnet4sig.RegNet1d(num_classes=args.nb_classes)#変更
-        elif args.model == "Transformer":
+        if args.model == "Transformer":
             teacher_model = transformer.L(num_classes=args.nb_classes)
         elif args.model == "MLPMixer":
             teacher_model = MLPMixer_for_signal.MLPMixer(in_channels=3, dim=768, num_classes=args.nb_classes, patch_size=16, sequence_length=496, depth=12)
@@ -515,7 +427,7 @@ def main(args):
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
-            set_training_mode=args.train_mode,  # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
+            set_training_mode=args.train_mode,
             args = args,
         )
 
@@ -572,7 +484,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('DeiT training and evaluation script', parents=[get_args_parser()])
+    parser = argparse.ArgumentParser('Training script', parents=[get_args_parser()])
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

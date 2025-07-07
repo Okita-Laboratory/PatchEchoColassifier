@@ -1,14 +1,10 @@
-# Copyright (c) 2015-present, Facebook, Inc.
-# All rights reserved.
 import os
 import numpy as np
 
-from torchvision import datasets, transforms
+from torchvision import transforms
 import torch
 import torch.nn as nn
-from torch.utils.data import (Dataset, 
-                              DataLoader,
-                              TensorDataset)
+from torch.utils.data import Dataset
 import random
 from sklearn.model_selection import train_test_split
 
@@ -75,19 +71,16 @@ class TriaxialSignalDataset(Dataset):
 
 def build_dataset(args):
     if args.data == "SHL2024":   
-        #500サンプル(ウィンドウ幅), 100Hz(1秒で100個)*5秒, 196072フレーム
         acc_x = np.loadtxt("../../SHL/SHL_2024/train/Hips/Acc_x.txt")
         acc_y = np.loadtxt("../../SHL/SHL_2024/train/Hips/Acc_y.txt")
         acc_z = np.loadtxt("../../SHL/SHL_2024/train/Hips/Acc_z.txt")
         label = np.loadtxt("../../SHL/SHL_2024/train/Hips/Label.txt", dtype=np.int64)
-        #8つのラベルは真ん中を代表として使う
         label = label[:,250]
         label = np.array([i-1 for i in label])
     
         acc_xyz = np.stack([acc_x, acc_y, acc_z], axis=1)
         nb_classes = 8
     elif args.data == "SHL2023":   
-        #500サンプル(ウィンドウ幅), 100Hz(1秒で100個)*5秒, 196104フレーム
         acc_xyz = np.load("../../SHL/SHL_2023/100hz_5.0s_overlap0.0s/train_clear/Hips_Acc.npy")
         label = np.load("../../SHL/SHL_2023/100hz_5.0s_overlap0.0s/train_clear/Hips_Label.npy")
 

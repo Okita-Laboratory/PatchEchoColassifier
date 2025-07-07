@@ -1,18 +1,5 @@
-"""
-resnet for 1-d signal data, pytorch version
- 
-Shenda Hong, Oct 2019
-"""
-
-import numpy as np
-from collections import Counter
-from tqdm import tqdm
-from matplotlib import pyplot as plt
-from sklearn.metrics import classification_report 
-
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
     
 class MyConv1dPadSame(nn.Module):
