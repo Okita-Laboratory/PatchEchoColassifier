@@ -344,7 +344,7 @@ def main(args):
           
 
     load_path = os.path.join(args.output_dir, 'best_checkpoint.pth')      
-    state_dict = torch.load(load_path)
+    state_dict = torch.load(load_path, weights_only=False)
     model.load_state_dict(state_dict["model"], strict=True)
             
     model.to(device)
